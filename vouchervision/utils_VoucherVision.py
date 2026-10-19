@@ -85,6 +85,7 @@ def process_single_image_worker(job_args):
 
     # --- 3. Call LLM (if OCR succeeded) ---
     response_candidate = None
+    response_candidate_sanitized = None #inserido
     nt_in, nt_out = 0, 0
     WFO_record, GEO_record, usage_report = None, None, None
     llm_failed = False
@@ -274,7 +275,7 @@ class VoucherVision():
         lgr = logging.getLogger('transformers')
         lgr.setLevel(logging.ERROR)
 
-        self.trOCR_processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten") # usually just the "microsoft/trocr-base-handwritten"
+        self.trOCR_processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten", use_fast=False) # usually just the "microsoft/trocr-base-handwritten"
         self.trOCR_model = VisionEncoderDecoderModel.from_pretrained(self.trOCR_model_version) # This matches the model
 
         # Check for GPU availability
@@ -288,7 +289,7 @@ class VoucherVision():
         # Get the required values from ModelMaps
         self.model_name = ModelMaps.get_version_mapping_cost(self.chat_version)
         self.is_azure = ModelMaps.get_version_mapping_is_azure(self.chat_version)
-        self.has_key = ModelMaps.get_version_has_key(self.chat_version, self.has_key_openai, self.has_key_azure_openai, self.has_key_google_application_credentials, self.has_key_mistral, self.has_key_hyperbolic)
+        self.has_key = ModelMaps.get_version_has_key(self.chat_version, self.has_key_openai, self.has_key_azure_openai, (self.has_key_google_application_credentials or self.has_key_google_palm), self.has_key_mistral, self.has_key_hyperbolic)
 
         # Check if the version is supported
         if self.model_name is None:
@@ -712,6 +713,7 @@ class VoucherVision():
                 k_google_project_id = self.cfg_private['google']['GOOGLE_PROJECT_ID']
                 k_google_location = self.cfg_private['google']['GOOGLE_LOCATION']
                 k_google_application_credentials = self.cfg_private['google']['GOOGLE_APPLICATION_CREDENTIALS']
+                k_google_palm = self.cfg_private['google']['GOOGLE_PALM_API']
                 
                 k_hyperbolic = self.cfg_private['hyperbolic']['HYPERBOLIC_API_KEY']
                 k_mistral = self.cfg_private['mistral']['MISTRAL_API_KEY']
@@ -729,7 +731,7 @@ class VoucherVision():
             k_google_project_id = os.getenv('GOOGLE_PROJECT_ID')
             k_google_location = os.getenv('GOOGLE_LOCATION')
             k_google_application_credentials = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-
+            k_google_palm = os.getenv('GOOGLE_PALM_API')
             k_hyperbolic = None
             k_mistral = None
             k_here = None
@@ -744,7 +746,7 @@ class VoucherVision():
         self.has_key_google_project_id = self.has_API_key(k_google_project_id)
         self.has_key_google_location = self.has_API_key(k_google_location)
         self.has_key_google_application_credentials = self.has_API_key(k_google_application_credentials)
-
+        self.has_key_google_palm = self.has_API_key(k_google_palm)
         self.has_key_hyperbolic = self.has_API_key(k_hyperbolic)
         self.has_key_mistral = self.has_API_key(k_mistral)
         self.has_key_here = self.has_API_key(k_here)
@@ -761,6 +763,8 @@ class VoucherVision():
             else:
                 vertexai.init(project=k_google_project_id, location=k_google_location, credentials=self.get_google_credentials())
                 os.environ['GOOGLE_API_KEY'] = self.cfg_private['google']['GOOGLE_PALM_API']
+        elif self.has_key_google_palm:
+            os.environ['GOOGLE_API_KEY'] = k_google_palm
 
 
         ### OpenAI
@@ -865,6 +869,47 @@ class VoucherVision():
             raise TypeError("Data is not of type dict.")
         
 
+    def normalize_taxonomic_fields(self, data): #alteração
+        # Padroniza campos conforme convenções do Darwin Core
+        if not isinstance(data, dict):
+            return data
+
+        # 1. specificEpithet sempre em minúsculo
+        if data.get('specificEpithet'):
+            data['specificEpithet'] = data['specificEpithet'].lower()
+
+        # 2. country padronizado em inglês + countryCode (ISO 3166-1 alpha-2)
+        country_map = {
+            'brasil': ('Brazil', 'BR'),
+            'brazil': ('Brazil', 'BR'),
+        }
+        if data.get('country'):
+            key = data['country'].strip().lower()
+            if key in country_map:
+                nome_padronizado, codigo = country_map[key]
+                data['country'] = nome_padronizado
+                data['countryCode'] = codigo
+
+        # 3. Datas placeholder (0000-00-00) viram campo vazio, conforme DwC
+        if data.get('collectionDate') == '0000-00-00':
+            data['collectionDate'] = ''
+
+        # 4. basisOfRecord fixo para espécimes de herbário, se vazio
+        data['basisOfRecord'] = 'PreservedSpecimen'
+
+        return data
+
+    def sort_xlsx_by_filename(self, path_transcription): # uso do pandas para ordenação
+        import pandas as pd
+        try:
+            df = pd.read_excel(path_transcription, sheet_name=0)
+            if 'filename' not in df.columns or len(df) < 2:
+                return
+            df_sorted = df.sort_values(by='filename', kind='stable', na_position='last')
+            df_sorted.to_excel(path_transcription, sheet_name='Sheet', index=False)
+        except Exception as e:
+            self.logger.error(f"Failed to sort final xlsx by filename: {e}")
+                
     def write_json_to_file(self, filepath, data):
         '''Writes dictionary data to a JSON file.'''
         with open(filepath, 'w') as txt_file:
@@ -1877,7 +1922,7 @@ class VoucherVision():
 
         # --- Execute Jobs in Parallel ---
         all_results = [None] * len(self.img_paths)
-        num_workers = min(16, len(valid_img_paths))
+        num_workers = min(1, len(valid_img_paths))
         self.logger.info(f"Starting {num_workers} worker threads for {len(jobs)} images.")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
@@ -1940,11 +1985,11 @@ class VoucherVision():
             if json_report:
                 json_report.set_JSON(final_JSON_response, final_WFO_record, final_GEO_record)
 
+        # Reordena a planilha por filename UMA ÚNICA VEZ, com todo o lote já processado
+        self.sort_xlsx_by_filename(self.path_transcription)
+        
         # Clean up and finalize
         self.ocr_method = "|".join(sorted(list(collected_ocr_methods)))
-        import torch
-        torch.cuda.empty_cache()
-        gc.collect()
 
         self.update_progress_report_final(progress_report)
         if final_JSON_response:
@@ -2082,6 +2127,7 @@ class VoucherVision():
         ### Set completed JSON
         else:
             response = self.clean_catalog_number(response, filename_without_extension)
+            response = self.normalize_taxonomic_fields(response) #incluiu-se esta linha
             self.write_json_to_file(txt_file_path, response)
             # add to the xlsx file
             self.add_data_to_excel_from_response(Dirs, self.path_transcription, response, WFO_record, GEO_record, usage_report, MODEL_NAME_FORMATTED, filename_without_extension, path_to_crop, txt_file_path, jpg_file_path_OCR_helper, nt_in, nt_out)

@@ -253,3 +253,8 @@ dmypy.json
 VoucherVision.yaml
 node_modules/
 yarn.lock
+
+.pip_cache/
+.streamlit/
+lote_3_imagens/
+*.zip

@@ -499,7 +499,7 @@ def content_input_images(col_left, col_right):
             ### Input Images Local
             st.session_state.config['leafmachine']['project']['dir_images_local'] = st.text_input("Input images directory", st.session_state.config['leafmachine']['project'].get('dir_images_local', ''))
         
-            st.session_state.config['leafmachine']['project']['continue_run_from_partial_xlsx'] = st.text_input("Continue run from partially completed project XLSX", st.session_state.config['leafmachine']['project'].get('continue_run_from_partial_xlsx', ''), disabled=True)
+            st.session_state.config['leafmachine']['project']['continue_run_from_partial_xlsx'] = st.text_input("Continue run from partially completed project XLSX", st.session_state.config['leafmachine']['project'].get('continue_run_from_partial_xlsx', ''))
         else:
             pass
     
@@ -2333,6 +2333,7 @@ def content_ocr_method():
     options = [
                 "Gemini-2.0-Flash",
                 "Gemini-3.5-Flash",
+                "Gemini-3.1-Flash-Lite",
                 "Gemini-3-Flash-Preview",
                 "Gemini-3.1-Pro-Preview",
                 "Gemini-2.5-Pro",
@@ -2416,6 +2417,7 @@ def content_ocr_method():
 
             "Gemini-2.0-Flash": "Gemini-2.0-Flash",
             "Gemini-3.5-Flash": "Gemini-3.5-Flash",
+            "Gemini-3.1-Flash-Lite": "gemini-3.1-flash-lite",
             "Gemini-3-Flash-Preview": "Gemini-3-Flash-Preview",
             "Gemini-3.1-Pro-Preview": "Gemini-3.1-Pro-Preview",
             "Gemini-2.5-Pro": "Gemini-2.5-Pro",

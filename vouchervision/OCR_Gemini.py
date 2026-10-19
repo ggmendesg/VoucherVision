@@ -339,19 +339,20 @@ class OCRGeminiProVision:
         caller needs the exception to surface a friendly error. Transient
         errors continue to retry up to max_retries.
         """
-        max_retries = 3
+        max_retries = 5 #alteração no código
         last_exc = None
         for attempt in range(max_retries):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
                 last_exc = e
-                print(f"Attempt {attempt + 1} failed with error: {e}")
+                self.logger.error(f"[OCR retry] Attempt {attempt + 1}/{max_retries} failed with error: {e}")
                 if _is_fatal_api_error(e):
                     raise
                 wait_time = (2 ** attempt) + random.uniform(0, 1)
-                print(f"Retrying in {wait_time:.2f} seconds...")
+                self.logger.info(f"[OCR retry] Retrying in {wait_time:.2f} seconds...")
                 time.sleep(wait_time)
+        self.logger.error(f"[OCR retry] All {max_retries} attempts failed. Last error: {last_exc}")
         raise last_exc
     
     

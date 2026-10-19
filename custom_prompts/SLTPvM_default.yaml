@@ -36,6 +36,8 @@ rules:
   cultivated: If the text includes the word 'cult' or 'cultivated' then this value is 'yes'.
   continent: Use your knowledge to infer the continent where the natural history museum specimen was originally collected.
   country: Use your knowledge and the OCR text to infer the country where the natural history museum specimen was originally collected. 
+  countryCode: Two-letter ISO 3166-1 alpha-2 country code corresponding to the country field (e.g., 'BR' for Brazil). Leave empty if uncertain. # incluso
+  basisOfRecord: The nature of the record. For herbarium specimens, this value is always 'PreservedSpecimen'. #incluso
   stateProvince: The name of the sub-national administrative region than country (state, province, canton, department, region, etc.) where the specimen was originally collected.
   county: The full, unabbreviated name of the next smaller administrative region than stateProvince (county, shire, department, parish etc.) where the specimen was originally collected.
   locality: Description of geographic location, landmarks, regional features, nearby places, municipality, city, or any contextual information aiding in pinpointing the exact origin or location of the specimen.
@@ -50,8 +52,10 @@ rules:
 mapping:
   GEOGRAPHY:
   - catalogNumber
+  - basisOfRecord
   - continent
   - country
+  - countryCode
   - stateProvince
   - county
   - locality
